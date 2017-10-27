@@ -3,6 +3,7 @@ from time import sleep
 from cmap import *
 from gui import *
 from utils import *
+import random
 
 MAX_NODES = 20000
 
@@ -49,14 +50,13 @@ def node_generator(cmap):
     newX = random.randint(0,w)
     newY = random.randint(0,h)
 
-    rand_node = ([newX, newY], None)
+    rand_node = Node([newX, newY])
     
     while not cmap.is_inbound(rand_node) or cmap.is_inside_obstacles(rand_node):
-        w, h = cmap.get_size()
         newX = random.randint(0,w)
         newY = random.randint(0,h)
 
-        rand_node = ([newX, newY], None)
+        rand_node = Node([newX, newY])
     ############################################################################
     return rand_node
 
@@ -76,7 +76,14 @@ def RRT(cmap, start):
         # 4. Add one path from nearest node to random node
         #
         rand_node = cmap.get_random_valid_node()
-        nearest_node = #not sure perhaps have to do cmap.get_nodes and loop thru for smallest Get_dist value
+        nodes = cmap.get_nodes()
+        distance = get_dist(rand_node, nodes[0])
+        index = 0 
+        for i in range(1,len(nodes)):
+            if get_dist(rand_node, nodes[i]) < distance:
+                index = i
+                distance = get_dist(rand_node, nodes[i])
+        nearest_node = nodes[index]
         pass
         ########################################################################
         sleep(0.01)
