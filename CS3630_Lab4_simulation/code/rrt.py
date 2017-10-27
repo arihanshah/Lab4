@@ -32,6 +32,7 @@ def step_from_to(node0, node1, limit=75):
         newY = (1-t)(node0.y) + (t)(node1.y)
         newNode = ([newX, newY], node0)
         return newNode
+    #didn't use arctan2 don't know what a vector angle is supposed to do.
     ############################################################################
 
 
@@ -75,7 +76,7 @@ def RRT(cmap, start):
         # 4. Add one path from nearest node to random node
         #
         rand_node = cmap.get_random_valid_node()
-        nearest_node = 
+        nearest_node = #not sure perhaps have to do cmap.get_nodes and loop thru for smallest Get_dist value
         pass
         ########################################################################
         sleep(0.01)
