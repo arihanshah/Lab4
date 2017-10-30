@@ -4,6 +4,7 @@ from cmap import *
 from gui import *
 from utils import *
 import random
+import math
 
 MAX_NODES = 20000
 
@@ -25,13 +26,16 @@ def step_from_to(node0, node1, limit=75):
     # 3. Hint: please consider using np.arctan2 function to get vector angle
     # 4. Note: remember always return a Node object
     distance = get_dist(node0, node1)
-    if distance < limit:
+    print(get_dist(node0, node1))
+    if distance <= limit:
+        print(get_dist(node1, node0))
         return node1
     else:
-        t = limit / distance
-        newX = (1-t)(node0.x) + (t)(node1.x)
-        newY = (1-t)(node0.y) + (t)(node1.y)
-        newNode = ([newX, newY], node0)
+        angle = np.arctan2(node1.y - node0.y, node1.x - node0.x)
+        newX = node0.x + (limit * math.cos(angle))
+        newY = node0.y + (limit * math.sin(angle))
+        newNode = Node([newX, newY], node0)
+        print(get_dist(newNode, node0))
         return newNode
     #didn't use arctan2 don't know what a vector angle is supposed to do.
     ############################################################################
@@ -84,10 +88,11 @@ def RRT(cmap, start):
                 index = i
                 distance = get_dist(rand_node, nodes[i])
         nearest_node = nodes[index]
+        next_node = step_from_to(nearest_node, rand_node)
         pass
         ########################################################################
         sleep(0.01)
-        cmap.add_path(nearest_node, rand_node)
+        cmap.add_path(nearest_node, next_node)
         if cmap.is_solved():
             break
 
