@@ -3,6 +3,7 @@ import cozmo
 from cmap import *
 from gui import *
 from utils import *
+import math
 
 MAX_NODES = 20000
 
@@ -23,7 +24,18 @@ def step_from_to(node0, node1, limit=75):
     #    limit units at most
     # 3. Hint: please consider using np.arctan2 function to get vector angle
     # 4. Note: remember always return a Node object
-    return node1
+    distance = get_dist(node0, node1)
+    print(get_dist(node0, node1))
+    if distance <= limit:
+        print(get_dist(node1, node0))
+        return node1
+    else:
+        angle = np.arctan2(node1.y - node0.y, node1.x - node0.x)
+        newX = node0.x + (limit * math.cos(angle))
+        newY = node0.y + (limit * math.sin(angle))
+        newNode = Node([newX, newY], node0)
+        print(get_dist(newNode, node0))
+        return newNode
     ############################################################################
 
 
@@ -35,7 +47,17 @@ def node_generator(cmap):
     # 2. Use CozMap.is_inbound and CozMap.is_inside_obstacles to determine the
     #    legitimacy of the random node.
     # 3. Note: remember always return a Node object
-    pass
+    w, h = cmap.get_size()
+    newX = random.randint(0, w)
+    newY = random.randint(0, h)
+
+    rand_node = Node([newX, newY])
+
+    while not cmap.is_inbound(rand_node) or cmap.is_inside_obstacles(rand_node):
+        newX = random.randint(0, w)
+        newY = random.randint(0, h)
+
+        rand_node = Node([newX, newY])
     ############################################################################
     return rand_node
 
@@ -54,12 +76,20 @@ def RRT(cmap, start):
         # 3. Limit the distance RRT can move
         # 4. Add one path from nearest node to random node
         #
-        rand_node = None
-        nearest_node = None
+        rand_node = cmap.get_random_valid_node()
+        nodes = cmap.get_nodes()
+        distance = get_dist(rand_node, nodes[0])
+        index = 0
+        for i in range(1,len(nodes)):
+            if get_dist(rand_node, nodes[i]) < distance:
+                index = i
+                distance = get_dist(rand_node, nodes[i])
+        nearest_node = nodes[index]
+        next_node = step_from_to(nearest_node, rand_node)
         pass
         ########################################################################
         sleep(0.01)
-        cmap.add_path(nearest_node, rand_node)
+        cmap.add_path(nearest_node, next_node)
         if cmap.is_solved():
             break
 
