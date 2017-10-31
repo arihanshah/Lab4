@@ -4,6 +4,7 @@ from cmap import *
 from gui import *
 from utils import *
 import math
+import cv2
 
 MAX_NODES = 20000
 
@@ -109,6 +110,60 @@ async def CozmoPlanning(robot: cozmo.robot.Robot):
     ########################################################################
     # TODO: please enter your code below.
     # Description of function provided in instructions
+
+    robot.world.image_annotator.annotation_enabled = True
+    # robot.world.image_annotator.add_annotator('box', BoxAnnotator)
+
+    robot.camera.image_stream_enabled = True
+    robot.camera.color_image_enabled = True
+    robot.camera.enable_auto_exposure = True
+
+    gain,exposure,mode = 390,3,1
+
+    start = Node([(100, 75)])
+    try:
+
+        detect_cube = False
+        cube_seen = None
+
+        while (True):
+
+            print (cube_seen)
+            if not detect_cube:
+                try:
+                    cube_seen = await robot.world.wait_for_observed_light_cube(timeout=1)
+                    if cube_seen.object_id == robot.world.light_cubes[cozmo.objects.LightCube2Id].object_id:
+                        detect_cube = True
+                    else:
+                        detect_cube = False
+
+                        oX1 = start.x + cube_seen.pose.position.x - 32
+                        oY1 = start.y + cube_seen.pose.position.y + 32
+
+                        oX2 = start.x + cube_seen.pose.position.x + 32
+                        oY2 = start.y + cube_seen.pose.position.y + 32
+
+                        oX3 = start.x + cube_seen.pose.position.x + 32
+                        oY3 = start.y + cube_seen.pose.position.y - 32
+
+                        oX4 = start.x + cube_seen.pose.position.x - 32
+                        oY4 = start.y + cube_seen.pose.position.y - 32
+
+                        cmap.add_obstacle([Node([oX1, oY1]), Node([oX2, oY2]), Node([oX3, oY3]), Node([oX4, oY4])])
+                        print ("hey")
+                except:
+                    cube_seen = None
+                    detect_cube = False
+
+
+
+
+
+    except KeyboardInterrupt:
+        print("")
+        print("Exit requested by user")
+    except cozmo.RobotBusy as e:
+        print(e)
 
     
 
