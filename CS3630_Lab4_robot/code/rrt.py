@@ -116,6 +116,7 @@ class CubeSearcher(object):
         self.fsm.add_transition(trigger='found_cube', source='search_cube', dest='plan_path')
         self.fsm.add_transition(trigger='found_path', source='plan_path', dest='drive_path')
         self.fsm.add_transition(trigger='found_face', source='*', dest='found_dest')
+        self.fsm.add_transition(trigger='found_obstacle', source='*', dest='plan_path')
         self.robot = robot
 
 async def CozmoPlanning(robot: cozmo.robot.Robot):
@@ -133,6 +134,7 @@ async def CozmoPlanning(robot: cozmo.robot.Robot):
     centered = False
     turn_angle = 0.0
     prev_angle = 0.0
+    obstacles = []
 
     try:
 
@@ -230,10 +232,11 @@ async def CozmoPlanning(robot: cozmo.robot.Robot):
                     if not angled and not cube_seen:
                         await robot.turn_in_place(angle=cozmo.util.Angle(radians=angle)).wait_for_completed()
                         angled = True
+                        turn_angle = math.degrees(angle)
                     elif not centered and not cube_seen:
                         xDist = dist * math.cos(angle)
                         yDist = dist * math.sin(angle)
-                        robot.drive_straight(distance=cozmo.util.Distance(275.0), speed=cozmo.util.Speed(600.0))
+                        await robot.drive_straight(distance=cozmo.util.Distance(275.0), speed=cozmo.util.Speed(600.0)).wait_for_completed()
                         centered = True
                         start = Node([start.x + xDist, start.y + yDist])
                     else:
@@ -267,7 +270,71 @@ async def CozmoPlanning(robot: cozmo.robot.Robot):
                     new_angle = turn_angle - prev_angle
 
                     await robot.turn_in_place(cozmo.util.Angle(degrees=new_angle)).wait_for_completed()
-                    await robot.drive_straight(distance_mm(get_dist(cur, i)), speed_mmps(40)).wait_for_completed()
+                    await robot.drive_straight(distance = (cozmo.util.Distance(get_dist(cur, i))) * 1.25, speed=speed_mmps(40)).wait_for_completed()
+                    start = cur
+                    cube_obstacle = None
+                    try:
+
+                        cube_obstacle = await robot.world.wait_for_observed_light_cube(timeout=1)
+                    except Exception:
+                        pass
+
+                    if cube_obstacle:
+                        obstacles.append(cube_obstacle.object_id)
+
+                    if cube_obstacle and cube_obstacle.object_id not in obstacles and cube_obstacle.object_id != robot.world.light_cubes[cozmo.objects.LightCube1Id].object_id:
+                        z_angle = cube_seen.pose.rotation.angle_z.radians
+                        # x = cube_seen.pose.position.x + 22 * np.cos(z_angle) + 55 * np.cos(z_angle)
+                        # y = cube_seen.pose.position.y + 22 * np.sin(z_angle) + 55 * np.sin(z_angle)
+
+                      
+                        edge_offset = 22.5
+
+
+                        xpos = cube_obstacle.pose.position.x
+                        ypos = cube_obstacle.pose.position.y
+
+                        angle = math.atan2((ypos - start.y), (xpos - start.x))
+                        inner_angle = math.pi / 4
+                        face_angle = math.pi / 2
+
+                        x = start.x + xpos * math.cos(angle) + edge_offset * np.sin(z_angle + face_angle)
+                        y = start.y + ypos * math.sin(angle) - edge_offset * np.cos(z_angle + face_angle)
+                        # angle_z =cozmo.util.Angle(z_angle + np.pi)
+
+
+                        c1 = Node([start.x + xpos * math.cos(angle) - edge_offset,
+                                   start.y + ypos * math.sin(angle) + edge_offset])
+
+                        c2 = Node([start.x + xpos * math.cos(angle) + edge_offset,
+                                   start.y + ypos * math.sin(angle) + edge_offset])
+
+                        c3 = Node([start.x + xpos * math.cos(angle) + edge_offset,
+                                   start.y + ypos * math.sin(angle) - edge_offset])
+
+                        c4 = Node([start.x + xpos * math.cos(angle) - edge_offset,
+                                   start.y + ypos * math.sin(angle) - edge_offset])
+
+                        # print (y)
+                        # print ("z_angle")
+                        # print (z_angle)
+                        # print ("c1")
+                        # print (c1.x)
+                        # print (c1.y)
+                        # print("c2")
+                        # print(c2.x)
+                        # print(c2.y)
+                        # print("c3")
+                        # print(c3.x)
+                        # print(c3.y)
+                        # print("c4")
+                        # print(c4.x)
+                        # print(c4.y)
+                        cmap.set_start(cur)
+                        cmap.add_obstacle([c1, c2, c3, c4])
+                        cmap.reset()
+                        cubeSearcher.found_obstacle()
+
 
                     cur = i
 
