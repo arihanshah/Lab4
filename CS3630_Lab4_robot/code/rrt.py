@@ -4,7 +4,10 @@ from cmap import *
 from gui import *
 from utils import *
 import math
-import cv2
+import random
+from time import sleep
+from transitions import Machine
+import numpy as np
 
 MAX_NODES = 20000
 
@@ -26,16 +29,14 @@ def step_from_to(node0, node1, limit=75):
     # 3. Hint: please consider using np.arctan2 function to get vector angle
     # 4. Note: remember always return a Node object
     distance = get_dist(node0, node1)
-    print(get_dist(node0, node1))
     if distance <= limit:
-        print(get_dist(node1, node0))
-        return node1
+        newNode = Node([node1.x, node1.y], node0)
+        return newNode
     else:
         angle = np.arctan2(node1.y - node0.y, node1.x - node0.x)
         newX = node0.x + (limit * math.cos(angle))
         newY = node0.y + (limit * math.sin(angle))
         newNode = Node([newX, newY], node0)
-        print(get_dist(newNode, node0))
         return newNode
     ############################################################################
 
@@ -64,7 +65,7 @@ def node_generator(cmap):
 
 
 def RRT(cmap, start):
-    cmap.add_node(start)
+    cmap.set_start(start)
 
     map_width, map_height = cmap.get_size()
 
@@ -79,13 +80,16 @@ def RRT(cmap, start):
         #
         rand_node = cmap.get_random_valid_node()
         nodes = cmap.get_nodes()
-        distance = get_dist(rand_node, nodes[0])
+        distance = get_dist(rand_node, cmap.get_start())
         index = 0
-        for i in range(1,len(nodes)):
-            if get_dist(rand_node, nodes[i]) < distance:
-                index = i
-                distance = get_dist(rand_node, nodes[i])
-        nearest_node = nodes[index]
+        if len(nodes) > 0:
+            for i in range(0,len(nodes)):
+                if get_dist(rand_node, nodes[i]) < distance:
+                    index = i
+                    distance = get_dist(rand_node, nodes[i])
+            nearest_node = nodes[index]
+        else:
+            nearest_node = cmap.get_start()
         next_node = step_from_to(nearest_node, rand_node)
         pass
         ########################################################################
@@ -100,7 +104,18 @@ def RRT(cmap, start):
         print("Please try again :-(")
 
 
+class CubeSearcher(object):
+    global cmap, stopevent
 
+    states = ["search_cube", "plan_path", "drive_path", "found_dest"]
+
+    def __init__(self, robot):
+        self.fsm = Machine(model=self, states=CubeSearcher.states, initial='search_cube', ignore_invalid_triggers=True)
+
+        self.fsm.add_transition(trigger='found_cube', source='search_cube', dest='plan_path')
+        self.fsm.add_transition(trigger='found_path', source='plan_path', dest='drive_path')
+        self.fsm.add_transition(trigger='found_face', source='*', dest='found_dest')
+        self.robot = robot
 
 async def CozmoPlanning(robot: cozmo.robot.Robot):
     # Allows access to map and stopevent, which can be used to see if the GUI
@@ -111,52 +126,144 @@ async def CozmoPlanning(robot: cozmo.robot.Robot):
     # TODO: please enter your code below.
     # Description of function provided in instructions
 
-    robot.world.image_annotator.annotation_enabled = True
-    # robot.world.image_annotator.add_annotator('box', BoxAnnotator)
+    start = Node([100, 75])
+    cubeSearcher = CubeSearcher(robot)
+    angled = False
+    centered = False
 
-    robot.camera.image_stream_enabled = True
-    robot.camera.color_image_enabled = True
-    robot.camera.enable_auto_exposure = True
-
-    gain,exposure,mode = 390,3,1
-
-    start = Node([(100, 75)])
     try:
 
         detect_cube = False
         cube_seen = None
+        path = []
 
         while (True):
 
-            print (cube_seen)
-            if not detect_cube:
+            state = cubeSearcher.state
+
+            # FOR TESTING ###############
+            # state = "hey"
+            if state == "hey":
                 try:
-                    cube_seen = await robot.world.wait_for_observed_light_cube(timeout=1)
-                    if cube_seen.object_id == robot.world.light_cubes[cozmo.objects.LightCube2Id].object_id:
-                        detect_cube = True
-                    else:
-                        detect_cube = False
-
-                        oX1 = start.x + cube_seen.pose.position.x - 32
-                        oY1 = start.y + cube_seen.pose.position.y + 32
-
-                        oX2 = start.x + cube_seen.pose.position.x + 32
-                        oY2 = start.y + cube_seen.pose.position.y + 32
-
-                        oX3 = start.x + cube_seen.pose.position.x + 32
-                        oY3 = start.y + cube_seen.pose.position.y - 32
-
-                        oX4 = start.x + cube_seen.pose.position.x - 32
-                        oY4 = start.y + cube_seen.pose.position.y - 32
-
-                        cmap.add_obstacle([Node([oX1, oY1]), Node([oX2, oY2]), Node([oX3, oY3]), Node([oX4, oY4])])
-                        print ("hey")
+                    cube_seen = await robot.world.wait_for_observed_light_cube(timeout=2)
+                    print ("x : {} , y : {} , angle : {} ".format(cube_seen.pose.position.x,
+                                                                  cube_seen.pose.position.y,
+                                                                  cozmo.util.Angle(cube_seen.pose.rotation.angle_z.radians).degrees))
                 except:
                     cube_seen = None
-                    detect_cube = False
+            ###############################
+
+            if state == "search_cube":
+                try:
+                    cube_seen = await robot.world.wait_for_observed_light_cube(timeout=2)
+                    print ("Id : ", cube_seen.object_id)
+                    print ("Real Id : ", robot.world.light_cubes[cozmo.objects.LightCube1Id].object_id)
+                    if cube_seen.object_id == robot.world.light_cubes[cozmo.objects.LightCube1Id].object_id:
+                        z_angle = cube_seen.pose.rotation.angle_z.radians
+                        x = cube_seen.pose.position.x + 22 * np.cos(z_angle) + 55 * np.cos(z_angle)
+                        y = cube_seen.pose.position.y + 22 * np.sin(z_angle) + 55 * np.sin(z_angle)
+                        # angle_z =cozmo.util.Angle(z_angle + np.pi)
+
+                        #x = cube_seen.pose.position.x
+                        #y = cube_seen.pose.position.y
+
+                        print (x)
+                        print (y)
+                        cmap.add_goal(Node([x, y]))
+                        ObX, ObY = cube_seen.pose.position.x, cube_seen.pose.position.y
+                        offset = 25
+                        cmap.add_obstacle([Node([ObX - offset, ObY + offset]),
+                                           Node([ObX + offset, ObY + offset]),
+                                           Node([ObX + offset, ObY - offset]),
+                                           Node([ObX - offset, ObY - offset])])
+                        cubeSearcher.found_cube()
+                        print ("THE REAL STATE : ", cubeSearcher.state)
+
+                    else:
+                        pass
+                        # ObX, ObY = cube_seen.pose.position.x, cube_seen.pose.position.y
+                        # offset = 32.5
+                        # cmap.add_obstacle([Node([ObX - offset, ObY + offset]),
+                        #                    Node([ObX + offset, ObY + offset]),
+                        #                    Node([ObX + offset, ObY - offset]),
+                        #                    Node([ObX - offset, ObY - offset])])
+                except:
+                    angle = 45
+                    dist = 275
+                    if not angled and not cube_seen:
+                        await robot.turn_in_place(angle=cozmo.util.Angle(degrees=45)).wait_for_completed()
+                        angled = True
+                    elif not centered and not cube_seen:
+                        xDist = dist * math.cos(math.pi / 4)
+                        yDist = dist * math.sin(math.pi / 4)
+                        robot.drive_straight(distance=cozmo.util.Distance(275.0), speed=cozmo.util.Speed(600.0))
+                        centered = True
+                        start = Node([start.x + xDist, start.y + yDist])
+                    else:
+                        await robot.drive_wheels(-60, 60, duration=1)
+
+
+            if state == "plan_path":
+                cubeSearcher.found_path()
+                RRT(cmap, start)
+
+
+            
+
+            if state == "drive_path":
+                print(cmap.is_solved())
+                index = 0
+
+                if cmap.is_solved():
+                    goal = cmap.get_goals()[0]
+                    print(goal.parent)
+                    cur = goal
+                    while cur.parent is not None:
+                        path.append([cur.x,cur.y])
+                        cur = cur.parent
+                        index = index + 1
+                    
+                    print(path)
+
+                    cubeSearcher.found_face()
+
+            if state == "found_face":
+                pass
+
+            # if not detect_cube:
+            #     try:
+            #         cube_seen = await robot.world.wait_for_observed_light_cube(timeout=5)
+            #
+            #         if cube_seen.object_id == robot.world.light_cubes[cozmo.objects.LightCube2Id].object_id:
+            #             print (cube_seen)
+            #             detect_cube = True
+            #             cmap.add_goal(Node([cube_seen.pose.Position.x, cube_seen.pose.Position.y]))
+            #             bang = False
+            #     except:
+            #         if not cube_seen:
+            #             detect_cube = False
+            #             print ("hey")
+            #
+            #             await  robot.drive_wheels(-60, 60, duration=1)
+            #             robot.drive_straight(distance=cozmo.util.Distance(275.0), speed=cozmo.util.Speed(600.0))
 
 
 
+
+                            # oX1 = start.x + cube_seen.pose.position.x - 32
+                            # oY1 = start.y + cube_seen.pose.position.y + 32
+                            #
+                            # oX2 = start.x + cube_seen.pose.position.x + 32
+                            # oY2 = start.y + cube_seen.pose.position.y + 32
+                            #
+                            # oX3 = start.x + cube_seen.pose.position.x + 32
+                            # oY3 = start.y + cube_seen.pose.position.y - 32
+                            #
+                            # oX4 = start.x + cube_seen.pose.position.x - 32
+                            # oY4 = start.y + cube_seen.pose.position.y - 32
+                            #
+                            # cmap.add_obstacle([Node([oX1, oY1]), Node([oX2, oY2]), Node([oX3, oY3]), Node([oX4, oY4])])
+                            # print ("hey")
 
 
     except KeyboardInterrupt:
